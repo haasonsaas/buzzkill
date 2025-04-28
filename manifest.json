@@ -1,0 +1,17 @@
+
+{
+  "name": "Vendor Hype Detector",
+  "description": "Flags buzz-word-heavy company posts in your LinkedIn feed",
+  "version": "0.1.0",
+  "manifest_version": 3,
+  "permissions": ["storage"],
+  "host_permissions": ["https://www.linkedin.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["*://www.linkedin.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
