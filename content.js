@@ -69,16 +69,47 @@ const COLOR_SCALE = ["#8bc34a","#ffc107","#ff5722"];  // green→yellow→red
 const OBSERVER_ROOT = document.body;                   // watch entire doc
 // ------------------------------------------------------------
 
-// Helper: true ⇢ anchor href includes "/company/"
+// Helper: true ⇢ anchor href includes "/company/" or has company-like structure
 function isCompanyActor(postRoot) {
+  // Check for company link
   const actorLink = postRoot.querySelector('a[href*="/company/"]');
-  return Boolean(actorLink);
+  if (actorLink) return true;
+
+  // Check for actor title structure
+  const actorTitle = postRoot.querySelector('.update-components-actor__title');
+  if (actorTitle) {
+    // Check if it has company-like indicators
+    const titleText = actorTitle.textContent.toLowerCase();
+    const companyIndicators = ['inc', 'ltd', 'llc', 'corp', 'company', 'enterprises', 'group', 'holdings'];
+    
+    // Check for verified badge
+    const hasVerifiedBadge = actorTitle.querySelector('.text-view-model__verified-icon') !== null;
+    
+    // Check for premium badge
+    const hasPremiumBadge = actorTitle.querySelector('.text-view-model__linkedin-bug-premium-v2') !== null;
+    
+    // Check for supplementary info that might indicate company
+    const supplementaryInfo = actorTitle.querySelector('.update-components-actor__supplementary-actor-info');
+    const hasSupplementaryInfo = supplementaryInfo !== null;
+    
+    // Check for description that might indicate company
+    const description = postRoot.querySelector('.update-components-actor__description');
+    const hasDescription = description !== null;
+    
+    return companyIndicators.some(indicator => titleText.includes(indicator)) || 
+           hasVerifiedBadge || 
+           hasPremiumBadge || 
+           hasSupplementaryInfo ||
+           hasDescription;
+  }
+
+  return false;
 }
 
 // Helper: returns hype-count in main post content if available, else all text
 function hypeScore(postRoot) {
   // Try to get the main post text, fallback to all text
-  const mainText = postRoot.querySelector('.update-components-text')?.innerText?.toLowerCase();
+  const mainText = postRoot.querySelector('.update-components-text, .feed-shared-inline-show-more-text')?.innerText?.toLowerCase();
   const text = mainText || postRoot.innerText.toLowerCase();
   return HYPE_WORDS.reduce(
     (count, w) => count + (text.includes(w.toLowerCase()) ? 1 : 0),
@@ -128,10 +159,39 @@ function detectCringeBait(postRoot) {
   return score;
 }
 
+// Helper: find the top-level post container
+function findTopLevelPost(element) {
+  // Look for common top-level post containers
+  const topLevelSelectors = [
+    'div.feed-shared-update-v2',
+    'div[data-urn^="urn:li:activity:"]',
+    'div.fie-impression-container'
+  ];
+  
+  // Check if current element is a top-level container
+  if (topLevelSelectors.some(selector => element.matches(selector))) {
+    return element;
+  }
+  
+  // Check parent elements
+  let parent = element.parentElement;
+  while (parent) {
+    if (topLevelSelectors.some(selector => parent.matches(selector))) {
+      return parent;
+    }
+    parent = parent.parentElement;
+  }
+  
+  return element; // Fallback to original element if no top-level container found
+}
+
 // Inject badge top-right of post
 function tagPost(postRoot, hypeScore, cringeScore) {
-  // prevent duplicate tagging
-  if (postRoot.querySelector(".hype-badge")) return;
+  // Find the top-level post container
+  const topLevelPost = findTopLevelPost(postRoot);
+  
+  // prevent duplicate tagging by checking the top-level container
+  if (topLevelPost.querySelector(".hype-badge")) return;
 
   const totalScore = hypeScore + cringeScore;
   const idx = Math.min(totalScore, COLOR_SCALE.length - 1);
@@ -153,31 +213,44 @@ function tagPost(postRoot, hypeScore, cringeScore) {
   // for things that might change based on score
   badge.style.backgroundColor = COLOR_SCALE[idx];
   
-  postRoot.style.position = "relative";
-  postRoot.appendChild(badge);
+  topLevelPost.style.position = "relative";
+  topLevelPost.appendChild(badge);
 
   // Apply blur effect if total score is over 1
   if (totalScore > 1) {
-    const content = postRoot.querySelector('.update-components-text') || postRoot;
+    const content = topLevelPost.querySelector('.update-components-text, .feed-shared-inline-show-more-text') || topLevelPost;
     content.classList.add('hype-blur');
   }
 }
 
 // Main scan
 function scanPost(postRoot) {
-  if (!isCompanyActor(postRoot)) return;        // skip personal posts
-  const hype = hypeScore(postRoot);
-  const cringe = detectCringeBait(postRoot);
-  tagPost(postRoot, hype, cringe);
+  // Find the top-level post container
+  const topLevelPost = findTopLevelPost(postRoot);
+  
+  // Skip if we've already processed this post
+  if (topLevelPost.querySelector(".hype-badge")) return;
+  
+  if (!isCompanyActor(topLevelPost)) return;        // skip personal posts
+  const hype = hypeScore(topLevelPost);
+  const cringe = detectCringeBait(topLevelPost);
+  tagPost(topLevelPost, hype, cringe);
 }
 
-// Broadened selector to catch more post types, including control menu container
+// Broadened selector to catch more post types
 const postSelector = [
   'div.feed-shared-update-v2',
   'div[data-urn^="urn:li:activity:"]',
-  'div.update-components-update-v2__commentary',
+  'div.update-components-text.relative.update-components-update-v2__commentary',
   'div.feed-shared-inline-show-more-text',
-  'div.feed-shared-update-v2__control-menu-container'
+  'div.feed-shared-update-v2__control-menu-container',
+  'div[class*="update-components-actor"]',  // Match any element with update-components-actor in class
+  'div[class*="feed-shared"]',             // Match any feed-shared elements
+  'div[class*="update-components"]',       // Match any update-components elements
+  'div[class*="BFyLjthMMnayexUrBYClsFbsEDtmkg"]',  // Match the specific actor class
+  'div.fie-impression-container',          // Match impression container
+  'div.update-components-header',          // Match header components
+  'div.feed-shared-inline-show-more-text__see-more-less-toggle'  // Match show more/less toggle
 ].join(', ');
 const observer = new MutationObserver(mutations =>
   mutations.forEach(m => {
