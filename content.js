@@ -37,6 +37,34 @@ const HYPE_WORDS = [
   "eliminating middlemen","trust-based","digital ecosystem","fraud prevention","data integrity",
   "secure transactions","transparent transactions","automated agreements"
 ];
+
+// New patterns for cringe-bait detection
+const VULNERABILITY_PATTERNS = [
+  "struggled with", "faced challenges", "wasn't easy", "had to learn", "failed at",
+  "made mistakes", "wasn't perfect", "had doubts", "was scared", "felt lost",
+  "didn't know", "wasn't sure", "had to overcome", "was difficult", "was hard",
+  "wasn't simple", "had to figure out", "wasn't obvious", "had to adapt",
+  "was challenging", "wasn't straightforward"
+];
+
+const HUMBLE_BRAG_PATTERNS = [
+  "but now", "fast forward", "today we", "now we've", "we've achieved",
+  "we've built", "we've created", "we've developed", "we've launched",
+  "we've grown", "we've expanded", "we've reached", "we've secured",
+  "we've partnered", "we've collaborated", "we've innovated",
+  "we've transformed", "we've revolutionized", "we've disrupted",
+  "we've scaled", "we've optimized", "we've automated"
+];
+
+const CTA_PATTERNS = [
+  "what do you think?", "thoughts?", "agree?", "let me know",
+  "share your experience", "comment below", "drop a comment",
+  "would love to hear", "curious to know", "interested in",
+  "reach out", "connect with me", "follow for more",
+  "let's discuss", "let's connect", "let's talk",
+  "would you like to", "are you ready to", "want to learn more"
+];
+
 const COLOR_SCALE = ["#8bc34a","#ffc107","#ff5722"];  // green→yellow→red
 const OBSERVER_ROOT = document.body;                   // watch entire doc
 // ------------------------------------------------------------
@@ -58,14 +86,67 @@ function hypeScore(postRoot) {
   );
 }
 
+// New helper: detects cringe-bait pattern
+function detectCringeBait(postRoot) {
+  const mainText = postRoot.querySelector('.update-components-text')?.innerText?.toLowerCase();
+  const text = mainText || postRoot.innerText.toLowerCase();
+  
+  let score = 0;
+  let hasVulnerability = false;
+  let hasHumbleBrag = false;
+  let hasCTA = false;
+  
+  // Check for vulnerability pattern
+  VULNERABILITY_PATTERNS.forEach(pattern => {
+    if (text.includes(pattern)) {
+      hasVulnerability = true;
+      score += 1;
+    }
+  });
+  
+  // Check for humble brag pattern
+  HUMBLE_BRAG_PATTERNS.forEach(pattern => {
+    if (text.includes(pattern)) {
+      hasHumbleBrag = true;
+      score += 1;
+    }
+  });
+  
+  // Check for CTA pattern
+  CTA_PATTERNS.forEach(pattern => {
+    if (text.includes(pattern)) {
+      hasCTA = true;
+      score += 1;
+    }
+  });
+  
+  // Bonus points for having all three patterns
+  if (hasVulnerability && hasHumbleBrag && hasCTA) {
+    score += 2;
+  }
+  
+  return score;
+}
+
 // Inject badge top-right of post
-function tagPost(postRoot, score) {
+function tagPost(postRoot, hypeScore, cringeScore) {
   // prevent duplicate tagging
   if (postRoot.querySelector(".hype-badge")) return;
 
-  const idx = Math.min(score, COLOR_SCALE.length - 1);
+  const totalScore = hypeScore + cringeScore;
+  const idx = Math.min(totalScore, COLOR_SCALE.length - 1);
   const badge = document.createElement("div");
-  badge.textContent = score ? `Hype ${score}` : "Safe from hype ✅";
+  
+  let badgeText = "";
+  if (cringeScore >= 3) {
+    badgeText = "Cringe-bait detected 🚫";
+  } else if (hypeScore > 0) {
+    badgeText = `Hype ${hypeScore}`;
+  } else {
+    badgeText = "Safe from hype ✅";
+  }
+  
+  badge.textContent = badgeText;
   badge.className = "hype-badge";
   
   // Use our CSS class from content.css and add style properties directly 
@@ -75,8 +156,8 @@ function tagPost(postRoot, score) {
   postRoot.style.position = "relative";
   postRoot.appendChild(badge);
 
-  // Apply blur effect if hype score is over 1
-  if (score > 1) {
+  // Apply blur effect if total score is over 1
+  if (totalScore > 1) {
     const content = postRoot.querySelector('.update-components-text') || postRoot;
     content.classList.add('hype-blur');
   }
@@ -85,8 +166,9 @@ function tagPost(postRoot, score) {
 // Main scan
 function scanPost(postRoot) {
   if (!isCompanyActor(postRoot)) return;        // skip personal posts
-  const score = hypeScore(postRoot);
-  tagPost(postRoot, score);
+  const hype = hypeScore(postRoot);
+  const cringe = detectCringeBait(postRoot);
+  tagPost(postRoot, hype, cringe);
 }
 
 // Broadened selector to catch more post types, including control menu container
